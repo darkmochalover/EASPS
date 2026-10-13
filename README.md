@@ -23,12 +23,139 @@ python -m pip install torch==2.5.1 packaging ninja setuptools wheel
 python -m pip install --no-build-isolation -r requirements.txt
 ```
 
-Supported datasets: `MATH` (MATH500), `Countdown`, `MedQA`, and `HumanEval`. Evaluation data is included in `data/`.
+Supported datasets: `MATH` (MATH500), `Countdown`, `MedQA`, and `HumanEval`. See the Datasets and Data Preparation section for dataset sources and setup instructions.
 
 | Model option | Checkpoint |
 | --- | --- |
 | `qwen` | `Qwen/Qwen2.5-7B` |
 | `phi` | `microsoft/Phi-3.5-mini-instruct` |
+
+
+## Datasets and Data Preparation
+
+The evaluation benchmarks used in this study are publicly available.
+Dataset files and raw experimental outputs are not included in this
+repository. Download the benchmark datasets from the sources below
+and prepare them in the `data/` directory before running experiments.
+
+| Benchmark | Public source | Expected local file |
+| --- | --- | --- |
+| MATH500 | [OpenAI PRM800K](https://github.com/openai/prm800k), [MATH-500](https://huggingface.co/datasets/HuggingFaceH4/MATH-500) | `data/MATH500.json` |
+| HumanEval | [OpenAI HumanEval](https://github.com/openai/human-eval) | `data/HumanEval.jsonl` |
+| MedQA | [MedQA](https://github.com/jind11/MedQA) | `data/medQA/questions/US/4_options/phrases_no_exclude_test.jsonl` |
+| Countdown | [Countdown-Tasks-3to4](https://huggingface.co/datasets/Jiayi-Pan/Countdown-Tasks-3to4) | `data/countdown_cd3_test.jsonl` |
+
+### Prepare the datasets
+
+Run the following commands from the repository root.
+
+Create the dataset directories:
+
+```bash
+mkdir -p data/medQA/questions/US/4_options
+```
+
+**MATH500 (500 problems)**
+
+Download the public MATH-500 test split and convert it to the
+`prompt`/`answer` JSON format expected by the evaluation code.
+
+```bash
+curl -fL \
+  https://huggingface.co/datasets/HuggingFaceH4/MATH-500/resolve/main/test.jsonl \
+  -o data/MATH500_source.jsonl
+
+python - <<'PY'
+import json
+from pathlib import Path
+
+src = Path("data/MATH500_source.jsonl")
+rows = [
+    json.loads(line)
+    for line in src.read_text(encoding="utf-8").splitlines()
+    if line.strip()
+]
+assert len(rows) == 500
+
+records = [
+    {"prompt": row["problem"], "answer": row["answer"]}
+    for row in rows
+]
+Path("data/MATH500.json").write_text(
+    json.dumps(records, ensure_ascii=False, indent=2),
+    encoding="utf-8"
+)
+PY
+```
+
+**HumanEval (164 problems)**
+
+Download the official compressed evaluation file and decompress it.
+
+```bash
+curl -fL \
+  https://raw.githubusercontent.com/openai/human-eval/master/data/HumanEval.jsonl.gz \
+  -o data/HumanEval.jsonl.gz
+
+gzip -dc data/HumanEval.jsonl.gz > data/HumanEval.jsonl
+```
+
+**MedQA (USMLE, four options, test split)**
+
+Obtain `phrases_no_exclude_test.jsonl` from the US four-option
+data in the [official MedQA release](https://github.com/jind11/MedQA).
+
+A publicly available copy can also be downloaded from
+[Hugging Face](https://huggingface.co/datasets/GBaker/MedQA-USMLE-4-options).
+
+```bash
+curl -fL \
+  https://huggingface.co/datasets/GBaker/MedQA-USMLE-4-options/resolve/main/phrases_no_exclude_test.jsonl \
+  -o data/medQA/questions/US/4_options/phrases_no_exclude_test.jsonl
+```
+
+**Countdown (256 evaluation problems)**
+
+The evaluation code expects a fixed 256-example, three-number
+Countdown test set, stored as JSONL records with `input` and
+`output` fields.
+
+The original [Countdown-Tasks-3to4](https://huggingface.co/datasets/Jiayi-Pan/Countdown-Tasks-3to4)
+provides the source benchmark. A public 256-example evaluation
+snapshot in a compatible format is available in
+[GDSD](https://github.com/GaryBall/GDSD/blob/main/dataset/countdown_cd3_test.jsonl).
+
+To use that snapshot:
+
+```bash
+curl -fL \
+  https://raw.githubusercontent.com/GaryBall/GDSD/main/dataset/countdown_cd3_test.jsonl \
+  -o data/countdown_cd3_test.jsonl
+```
+
+**Note:** Exact reproduction of the reported Countdown results
+requires the same 256 evaluation examples used in the study.
+The public snapshot above should be checked against the original
+experimental dataset before treating it as identical.
+
+### Expected directory structure
+
+```text
+data/
+├── MATH500.json
+├── HumanEval.jsonl
+├── countdown_cd3_test.jsonl
+└── medQA/
+    └── questions/
+        └── US/
+            └── 4_options/
+                └── phrases_no_exclude_test.jsonl
+```
+
+The `data/` and `results/` directories are excluded from Git
+tracking. Model generations, evaluation results, and telemetry
+files are saved locally under `results/` during execution.
+
 
 ## Run
 
